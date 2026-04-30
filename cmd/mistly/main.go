@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
@@ -24,6 +26,8 @@ func main() {
 		cmdInit(os.Args[2:])
 	case "sites":
 		cmdSites(os.Args[2:])
+	case "token":
+		cmdToken()
 	default:
 		printUsage()
 		os.Exit(1)
@@ -181,12 +185,21 @@ func cmdSitesSnippet(args []string) {
 	fmt.Printf("<script src=\"%s/tracker.js\" data-site-id=\"%s\" defer></script>\n", *serverURL, site.ID)
 }
 
+func cmdToken() {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		log.Fatalf("generate token: %v", err)
+	}
+	fmt.Println(hex.EncodeToString(b))
+}
+
 func printUsage() {
 	fmt.Print(`Usage: mistly <command> [flags]
 
 Commands:
   init          Connect to the database, run migrations, and create your first site
   sites         Manage sites
+  token         Generate a secure random token for ADMIN_TOKEN
 
 Environment:
   DATABASE_URL  Postgres connection string (required)

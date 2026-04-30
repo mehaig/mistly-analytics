@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/mehaig/mistly-ingestor/internal/collect"
 	"github.com/mehaig/mistly-ingestor/internal/db"
@@ -18,6 +19,10 @@ func main() {
 	db.Connect()
 	db.Migrate()
 
+	if os.Getenv("ADMIN_TOKEN") == "" {
+		log.Println("warning: ADMIN_TOKEN not set — /sites endpoints are unprotected")
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/collect", collect.Handler)
 	mux.HandleFunc("/tracker.js", serveTracker)
@@ -25,9 +30,9 @@ func main() {
 		w.Write([]byte("ok"))
 	})
 
-	mux.HandleFunc("POST /sites", sites.Create)
-	mux.HandleFunc("GET /sites", sites.List)
-	mux.HandleFunc("GET /sites/{id}/snippet", sites.Snippet)
+	mux.HandleFunc("POST /sites", adminOnly(sites.Create))
+	mux.HandleFunc("GET /sites", adminOnly(sites.List))
+	mux.HandleFunc("GET /sites/{id}/snippet", adminOnly(sites.Snippet))
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -37,6 +42,22 @@ func main() {
 	log.Printf("Mistly listening on :%s", port)
 	if err := http.ListenAndServe(":"+port, mux); err != nil {
 		log.Fatal(err)
+	}
+}
+
+func adminOnly(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		token := os.Getenv("ADMIN_TOKEN")
+		if token == "" {
+			next(w, r)
+			return
+		}
+		auth := r.Header.Get("Authorization")
+		if !strings.HasPrefix(auth, "Bearer ") || strings.TrimPrefix(auth, "Bearer ") != token {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next(w, r)
 	}
 }
 
